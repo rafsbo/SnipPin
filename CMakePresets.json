@@ -1,0 +1,55 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "vs2022-x64",
+      "displayName": "Visual Studio 2022 - x64",
+      "description": "MSVC v143 toolset (keeps Windows 7 SP1 as a supported target)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "toolset": "v143",
+      "binaryDir": "${sourceDir}/build/vs2022-x64"
+    },
+    {
+      "name": "vs2022-x86",
+      "displayName": "Visual Studio 2022 - x86",
+      "inherits": "vs2022-x64",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build/vs2022-x86"
+    },
+    {
+      "name": "mingw-x64",
+      "displayName": "MinGW-w64 cross build - x64 (Linux host)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/mingw-x64",
+      "toolchainFile": "${sourceDir}/cmake/mingw-w64-x86_64.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "SNIPPIN_BUILD_TESTS": "OFF" }
+    },
+    {
+      "name": "mingw-x86",
+      "displayName": "MinGW-w64 cross build - x86 (Linux host)",
+      "inherits": "mingw-x64",
+      "binaryDir": "${sourceDir}/build/mingw-x86",
+      "toolchainFile": "${sourceDir}/cmake/mingw-w64-i686.cmake"
+    },
+    {
+      "name": "tests-host",
+      "displayName": "Unit tests on the host OS (Linux / macOS / Windows)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/tests-host",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "SNIPPIN_BUILD_APP": "OFF" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "vs2022-x64-release", "configurePreset": "vs2022-x64", "configuration": "Release" },
+    { "name": "vs2022-x86-release", "configurePreset": "vs2022-x86", "configuration": "Release" },
+    { "name": "mingw-x64", "configurePreset": "mingw-x64" },
+    { "name": "mingw-x86", "configurePreset": "mingw-x86" },
+    { "name": "tests-host", "configurePreset": "tests-host" }
+  ],
+  "testPresets": [
+    { "name": "vs2022-x64-release", "configurePreset": "vs2022-x64", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "tests-host", "configurePreset": "tests-host", "output": { "outputOnFailure": true } }
+  ]
+}

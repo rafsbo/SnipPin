@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest an idea for SnipPin
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your workflow (e.g. comparing data between two applications).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+  - type: checkboxes
+    id: compat
+    attributes:
+      label: Compatibility
+      options:
+        - label: This should also work on Windows 7 (or I describe a graceful fallback).

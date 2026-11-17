@@ -1,0 +1,94 @@
+// SnipPin resources: icon, manifest, version info and the settings dialog.
+#include <windows.h>
+#include <commctrl.h>
+
+#include "resource.h"
+#include "Version.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDI_APP_ICON ICON "SnipPin.ico"
+
+// Two flavours are built from the same sources (see CMakeLists.txt).
+#ifdef SNIPPIN_UIACCESS
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "SnipPin.uiaccess.manifest"
+#else
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "SnipPin.manifest"
+#endif
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION SNIPPIN_VERSION_MAJOR, SNIPPIN_VERSION_MINOR, SNIPPIN_VERSION_PATCH, 0
+ PRODUCTVERSION SNIPPIN_VERSION_MAJOR, SNIPPIN_VERSION_MINOR, SNIPPIN_VERSION_PATCH, 0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "SnipPin contributors"
+            VALUE "FileDescription", "SnipPin - pin windows and live snippets on top"
+            VALUE "FileVersion", SNIPPIN_VERSION_STRING
+            VALUE "InternalName", "SnipPin"
+            VALUE "LegalCopyright", "MIT License"
+            VALUE "OriginalFilename", "SnipPin.exe"
+            VALUE "ProductName", "SnipPin"
+            VALUE "ProductVersion", SNIPPIN_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+IDD_SETTINGS DIALOGEX 0, 0, 300, 352
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOPMOST
+CAPTION "SnipPin Settings"
+FONT 8, "MS Shell Dlg 2", 0, 0, 0x1
+BEGIN
+    GROUPBOX        "Keyboard shortcuts", -1, 7, 7, 286, 116
+    LTEXT           "Toggle always on top", -1, 14, 22, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 0, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 20, 136, 12
+    LTEXT           "Pick a window", -1, 14, 34, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 1, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 32, 136, 12
+    LTEXT           "Decrease opacity", -1, 14, 46, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 2, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 44, 136, 12
+    LTEXT           "Increase opacity", -1, 14, 58, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 3, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 56, 136, 12
+    LTEXT           "Toggle ghost mode (click-through)", -1, 14, 70, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 4, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 68, 136, 12
+    LTEXT           "Snip a region", -1, 14, 82, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 5, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 80, 136, 12
+    LTEXT           "Show / hide stash panel", -1, 14, 94, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 6, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 92, 136, 12
+    LTEXT           "Restore all windows (panic)", -1, 14, 106, 130, 8
+    CONTROL         "", IDC_HOTKEY_FIRST + 7, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 104, 136, 12
+
+    GROUPBOX        "Right-click menu", -1, 7, 128, 286, 44
+    AUTOCHECKBOX    "Open the SnipPin menu for any window with a mouse gesture", IDC_CTXMENU_ENABLED, 14, 140, 272, 10
+    COMBOBOX        IDC_CTXMENU_MODIFIERS, 14, 154, 150, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
+    GROUPBOX        "Snippets", -1, 7, 178, 286, 44
+    AUTOCHECKBOX    "New snippets are live mirrors (otherwise frozen snapshots)", IDC_SNIPPET_LIVE, 14, 190, 272, 10
+    AUTOCHECKBOX    "Compatibility rendering (use if live snippets stay empty)", IDC_SNIPPET_COMPAT, 14, 204, 272, 10
+
+    GROUPBOX        "General", -1, 7, 228, 286, 96
+    AUTOCHECKBOX    "Start SnipPin when I sign in to Windows", IDC_RUN_AT_STARTUP, 14, 240, 272, 10
+    AUTOCHECKBOX    "Keep pinned windows above fullscreen apps (z-order guard)", IDC_ZORDER_GUARD, 14, 252, 272, 10
+    AUTOCHECKBOX    "Show informational notifications", IDC_NOTIFICATIONS, 14, 264, 272, 10
+    LTEXT           "Opacity step (%)", -1, 14, 280, 130, 8
+    EDITTEXT        IDC_OPACITY_STEP, 150, 278, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+    LTEXT           "Ghost mode opacity (%)", -1, 14, 294, 130, 8
+    EDITTEXT        IDC_GHOST_OPACITY, 150, 292, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+    LTEXT           "History size (entries)", -1, 14, 308, 130, 8
+    EDITTEXT        IDC_HISTORY_SIZE, 150, 306, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+
+    PUSHBUTTON      "Restore &defaults", IDC_DEFAULTS, 7, 331, 70, 14
+    DEFPUSHBUTTON   "OK", IDOK, 189, 331, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 243, 331, 50, 14
+END

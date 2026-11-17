@@ -1,0 +1,133 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: MSVC ${{ matrix.arch }}
+    # windows-2022 ships Visual Studio 2022 with the v143 toolset, which still
+    # produces binaries that run on Windows 7 SP1.
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            platform: x64
+          - arch: x86
+            platform: Win32
+    env:
+      # Optional code signing (required for SnipPinUIA.exe to start).
+      # SIGNING_CERT_BASE64: base64 of a .pfx, SIGNING_CERT_PASSWORD: its password.
+      SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
+      SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.platform }} -T v143
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Sign executables
+        if: env.SIGNING_CERT_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERT_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName | Select-Object -Last 1
+          & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            /f $pfx /p $env:SIGNING_CERT_PASSWORD `
+            build\bin\Release\SnipPin.exe build\bin\Release\SnipPinUIA.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+          Remove-Item $pfx
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
+          $stage = "package\SnipPin"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item build\bin\Release\SnipPin.exe, build\bin\Release\SnipPinUIA.exe, README.md, LICENSE, CHANGELOG.md $stage
+          Copy-Item docs\UIACCESS.md, tools\install-uiaccess.ps1 $stage
+          $zip = "SnipPin-$version-${{ matrix.arch }}.zip"
+          Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  $zip" | Out-File -Encoding ascii "$zip.sha256"
+          "ZIP_NAME=$zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SnipPin-${{ matrix.arch }}
+          path: |
+            ${{ env.ZIP_NAME }}
+            ${{ env.ZIP_NAME }}.sha256
+          if-no-files-found: error
+
+  mingw:
+    name: MinGW-w64 cross build + host tests
+    # Keeps the code base compiler-portable (GCC/MinGW as well as MSVC).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends g++-mingw-w64 cmake
+
+      - name: Host unit tests
+        run: |
+          cmake --preset tests-host
+          cmake --build --preset tests-host --parallel
+          ctest --preset tests-host
+
+      - name: Cross build x64
+        run: |
+          cmake --preset mingw-x64
+          cmake --build --preset mingw-x64 --parallel
+
+      - name: Cross build x86
+        run: |
+          cmake --preset mingw-x86
+          cmake --build --preset mingw-x86 --parallel
+
+      - name: Verify Windows 7 compatible imports
+        run: |
+          python3 tools/check_win7_imports.py x86_64-w64-mingw32-objdump build/mingw-x64/bin/Release/*.exe
+          python3 tools/check_win7_imports.py i686-w64-mingw32-objdump build/mingw-x86/bin/Release/*.exe
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mingw]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            dist/*.zip
+            dist/*.sha256
