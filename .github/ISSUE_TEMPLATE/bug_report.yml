@@ -1,0 +1,41 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SnipPin version and edition
+      placeholder: "1.0.0, x64, standard (or UIAccess)"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 7 SP1 64-bit (Aero) / Windows 11 23H2"
+    validations:
+      required: true
+  - type: input
+    id: dpi
+    attributes:
+      label: Display scaling
+      placeholder: "100 % single monitor / 150 % + 100 % dual monitor"
+  - type: input
+    id: app
+    attributes:
+      label: Affected application / window
+      placeholder: "Excel 2016, Chrome, a game in fullscreen…"
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: Set `[Debug] LogToFile=1` in settings.ini, reproduce, and paste the relevant part of snippin.log.
+      render: text
