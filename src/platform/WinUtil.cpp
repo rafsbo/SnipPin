@@ -1,5 +1,8 @@
 #include "platform/WinUtil.h"
 
+// objbase.h first: WIN32_LEAN_AND_MEAN drops it from windows.h, and exdisp.h
+// needs its `interface` macro (MSVC fails without it; MinGW does not).
+#include <objbase.h>
 #include <exdisp.h>
 #include <shlobj.h>
 #include <shlwapi.h>
