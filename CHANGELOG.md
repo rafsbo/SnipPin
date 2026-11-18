@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-18
 
 ### Added
 - Always-on-top pinning for any window, Explorer folder or dialog, with a z-order guard for fullscreen applications.
@@ -16,3 +16,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - Crash-recovery journal and panic restore hotkey.
 - UIAccess edition (`SnipPinUIA.exe`) and installer script.
 - Windows 7 SP1 – Windows 11 support, x86 and x64 builds.
+
+[Unreleased]: https://github.com/rafsbo/SnipPin/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rafsbo/SnipPin/releases/tag/v1.0.0
