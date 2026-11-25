@@ -1,10 +1,15 @@
 #include "ui/StashPanel.h"
 
-#include "app/Strings.h"
+#include "app/AppInfo.h"
+#include "i18n/Catalog.h"
 #include "platform/ApiShim.h"
 #include "platform/WinUtil.h"
 
 namespace snippin {
+
+using i18n::StringId;
+using i18n::Tr;
+using i18n::TrFormat;
 namespace {
 
 constexpr wchar_t kClassName[] = L"SnipPin.StashPanel";
@@ -30,7 +35,7 @@ bool StashPanel::Create(HINSTANCE instance, RowProvider rows, ItemHandler onActi
     wc.lpszClassName = kClassName;
     ::RegisterClassExW(&wc);
 
-    hwnd_ = ::CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kClassName, str::kStashTitle,
+    hwnd_ = ::CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kClassName, Tr(StringId::StashTitle),
                               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_CLIPCHILDREN,
                               CW_USEDEFAULT, CW_USEDEFAULT, 360, 480, nullptr, nullptr, instance, this);
     if (!hwnd_) {
@@ -70,29 +75,50 @@ void StashPanel::CreateList() {
     }
 
     LVCOLUMNW col{};
-    col.mask = LVCF_TEXT | LVCF_WIDTH;
+    col.mask = LVCF_WIDTH;
     col.cx = 220;
-    col.pszText = const_cast<wchar_t*>(str::kStashColumnWindow);
     ListView_InsertColumn(list_, 0, &col);
     col.cx = 100;
-    col.pszText = const_cast<wchar_t*>(str::kStashColumnState);
     ListView_InsertColumn(list_, 1, &col);
 
     ListView_EnableGroupView(list_, TRUE);
+    for (PanelGroup id : {PanelGroup::Pinned, PanelGroup::Snippets, PanelGroup::Recent}) {
+        LVGROUP group{};
+        group.cbSize = sizeof(group);
+        group.mask = LVGF_GROUPID | LVGF_HEADER;
+        group.pszHeader = const_cast<wchar_t*>(L"");  // caption set by ApplyLanguage()
+        group.iGroupId = static_cast<int>(id);
+        ListView_InsertGroup(list_, -1, &group);
+    }
+    ApplyLanguage();
+}
+
+void StashPanel::ApplyLanguage() {
+    if (!hwnd_ || !list_) {
+        return;
+    }
+    ::SetWindowTextW(hwnd_, Tr(StringId::StashTitle));
+    const StringId columns[] = {StringId::StashColumnWindow, StringId::StashColumnState};
+    for (int i = 0; i < 2; ++i) {
+        LVCOLUMNW col{};
+        col.mask = LVCF_TEXT;
+        col.pszText = const_cast<wchar_t*>(Tr(columns[i]));
+        ListView_SetColumn(list_, i, &col);
+    }
     const struct {
         PanelGroup id;
-        const wchar_t* name;
-    } groups[] = {{PanelGroup::Pinned, str::kStashGroupPinned},
-                  {PanelGroup::Snippets, str::kStashGroupSnippets},
-                  {PanelGroup::Recent, str::kStashGroupRecent}};
+        StringId name;
+    } groups[] = {{PanelGroup::Pinned, StringId::StashGroupPinned},
+                  {PanelGroup::Snippets, StringId::StashGroupSnippets},
+                  {PanelGroup::Recent, StringId::StashGroupRecent}};
     for (const auto& g : groups) {
         LVGROUP group{};
         group.cbSize = sizeof(group);
-        group.mask = LVGF_HEADER | LVGF_GROUPID;
-        group.pszHeader = const_cast<wchar_t*>(g.name);
-        group.iGroupId = static_cast<int>(g.id);
-        ListView_InsertGroup(list_, -1, &group);
+        group.mask = LVGF_HEADER;
+        group.pszHeader = const_cast<wchar_t*>(Tr(g.name));
+        ListView_SetGroupInfo(list_, static_cast<int>(g.id), &group);
     }
+    Refresh();  // state texts ("On top", "Ghost", ...) are translated too
 }
 
 void StashPanel::ApplyDpi(UINT dpi) {

@@ -1,6 +1,14 @@
+#include <cstring>
+
 #include "TestHarness.h"
 
-int main() {
+void DumpEnglishCatalog();  // TranslationFilesTests.cpp
+
+int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--dump-english") == 0) {
+        DumpEnglishCatalog();
+        return 0;
+    }
     using namespace snippin::test;
     int failedTests = 0;
     for (const auto& test : Registry()) {

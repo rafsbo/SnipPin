@@ -28,15 +28,21 @@ void TrayIcon::Remove() {
     }
 }
 
-void TrayIcon::Readd() {
+bool TrayIcon::Readd() {
     added_ = false;
     NOTIFYICONDATAW copy = data_;
     copy.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
     added_ = ::Shell_NotifyIconW(NIM_ADD, &copy) != FALSE;
+    if (!added_) {
+        // NIM_ADD also fails when the icon is already there (e.g. the
+        // TaskbarCreated broadcast and the retry timer both fired).
+        added_ = ::Shell_NotifyIconW(NIM_MODIFY, &copy) != FALSE;
+    }
     if (added_) {
         copy.uVersion = NOTIFYICON_VERSION_4;
         ::Shell_NotifyIconW(NIM_SETVERSION, &copy);
     }
+    return added_;
 }
 
 void TrayIcon::ShowBalloon(const wchar_t* title, const wchar_t* text, bool warning) {

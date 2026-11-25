@@ -45,50 +45,58 @@ BEGIN
     END
 END
 
-IDD_SETTINGS DIALOGEX 0, 0, 300, 352
+// English captions below are placeholders: SettingsDialog.cpp sets every
+// text from the active language when the dialog opens.
+IDD_SETTINGS DIALOGEX 0, 0, 320, 370
 STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_TOPMOST
 CAPTION "SnipPin Settings"
 FONT 8, "MS Shell Dlg 2", 0, 0, 0x1
 BEGIN
-    GROUPBOX        "Keyboard shortcuts", -1, 7, 7, 286, 116
-    LTEXT           "Toggle always on top", -1, 14, 22, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 0, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 20, 136, 12
-    LTEXT           "Pick a window", -1, 14, 34, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 1, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 32, 136, 12
-    LTEXT           "Decrease opacity", -1, 14, 46, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 2, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 44, 136, 12
-    LTEXT           "Increase opacity", -1, 14, 58, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 3, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 56, 136, 12
-    LTEXT           "Toggle ghost mode (click-through)", -1, 14, 70, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 4, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 68, 136, 12
-    LTEXT           "Snip a region", -1, 14, 82, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 5, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 80, 136, 12
-    LTEXT           "Show / hide stash panel", -1, 14, 94, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 6, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 92, 136, 12
-    LTEXT           "Restore all windows (panic)", -1, 14, 106, 130, 8
-    CONTROL         "", IDC_HOTKEY_FIRST + 7, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 150, 104, 136, 12
+    GROUPBOX        "Keyboard shortcuts", IDC_GROUP_HOTKEYS, 7, 7, 306, 116
+    LTEXT           "Toggle always on top", IDC_LABEL_HOTKEY_FIRST + 0, 14, 22, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 0, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 20, 136, 12
+    LTEXT           "Pick a window", IDC_LABEL_HOTKEY_FIRST + 1, 14, 34, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 1, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 32, 136, 12
+    LTEXT           "Decrease opacity", IDC_LABEL_HOTKEY_FIRST + 2, 14, 46, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 2, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 44, 136, 12
+    LTEXT           "Increase opacity", IDC_LABEL_HOTKEY_FIRST + 3, 14, 58, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 3, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 56, 136, 12
+    LTEXT           "Toggle ghost mode (click-through)", IDC_LABEL_HOTKEY_FIRST + 4, 14, 70, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 4, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 68, 136, 12
+    LTEXT           "Snip a region", IDC_LABEL_HOTKEY_FIRST + 5, 14, 82, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 5, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 80, 136, 12
+    LTEXT           "Show / hide stash panel", IDC_LABEL_HOTKEY_FIRST + 6, 14, 94, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 6, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 92, 136, 12
+    LTEXT           "Restore all windows (panic)", IDC_LABEL_HOTKEY_FIRST + 7, 14, 106, 150, 8, SS_ENDELLIPSIS
+    CONTROL         "", IDC_HOTKEY_FIRST + 7, "msctls_hotkey32", WS_BORDER | WS_TABSTOP, 170, 104, 136, 12
 
-    GROUPBOX        "Right-click menu", -1, 7, 128, 286, 44
-    AUTOCHECKBOX    "Open the SnipPin menu for any window with a mouse gesture", IDC_CTXMENU_ENABLED, 14, 140, 272, 10
-    COMBOBOX        IDC_CTXMENU_MODIFIERS, 14, 154, 150, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "Right-click menu", IDC_GROUP_GESTURE, 7, 128, 306, 44
+    AUTOCHECKBOX    "Open the SnipPin menu for any window with a mouse gesture", IDC_CTXMENU_ENABLED, 14, 140, 292, 10
+    COMBOBOX        IDC_CTXMENU_MODIFIERS, 14, 154, 170, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    GROUPBOX        "Snippets", -1, 7, 178, 286, 44
-    AUTOCHECKBOX    "New snippets are live mirrors (otherwise frozen snapshots)", IDC_SNIPPET_LIVE, 14, 190, 272, 10
-    AUTOCHECKBOX    "Compatibility rendering (use if live snippets stay empty)", IDC_SNIPPET_COMPAT, 14, 204, 272, 10
+    GROUPBOX        "Snippets", IDC_GROUP_SNIPPETS, 7, 178, 306, 44
+    AUTOCHECKBOX    "New snippets are live mirrors (otherwise frozen snapshots)", IDC_SNIPPET_LIVE, 14, 190, 292, 10
+    AUTOCHECKBOX    "Compatibility rendering (use if live snippets stay empty)", IDC_SNIPPET_COMPAT, 14, 204, 292, 10
 
-    GROUPBOX        "General", -1, 7, 228, 286, 96
-    AUTOCHECKBOX    "Start SnipPin when I sign in to Windows", IDC_RUN_AT_STARTUP, 14, 240, 272, 10
-    AUTOCHECKBOX    "Keep pinned windows above fullscreen apps (z-order guard)", IDC_ZORDER_GUARD, 14, 252, 272, 10
-    AUTOCHECKBOX    "Show informational notifications", IDC_NOTIFICATIONS, 14, 264, 272, 10
-    LTEXT           "Opacity step (%)", -1, 14, 280, 130, 8
-    EDITTEXT        IDC_OPACITY_STEP, 150, 278, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
-    LTEXT           "Ghost mode opacity (%)", -1, 14, 294, 130, 8
-    EDITTEXT        IDC_GHOST_OPACITY, 150, 292, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
-    LTEXT           "History size (entries)", -1, 14, 308, 130, 8
-    EDITTEXT        IDC_HISTORY_SIZE, 150, 306, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+    GROUPBOX        "General", IDC_GROUP_GENERAL, 7, 228, 306, 114
+    LTEXT           "Language", IDC_LABEL_LANGUAGE, 14, 242, 150, 8, SS_ENDELLIPSIS
+    COMBOBOX        IDC_LANGUAGE, 170, 240, 136, 160, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Start SnipPin automatically when I sign in to Windows", IDC_RUN_AT_STARTUP, 14, 258, 292, 10
+    AUTOCHECKBOX    "Keep pinned windows above fullscreen apps (z-order guard)", IDC_ZORDER_GUARD, 14, 270, 292, 10
+    AUTOCHECKBOX    "Show informational notifications", IDC_NOTIFICATIONS, 14, 282, 292, 10
+    LTEXT           "Opacity step (%)", IDC_LABEL_OPACITY_STEP, 14, 298, 150, 8, SS_ENDELLIPSIS
+    EDITTEXT        IDC_OPACITY_STEP, 170, 296, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+    LTEXT           "Ghost mode opacity (%)", IDC_LABEL_GHOST_OPACITY, 14, 312, 150, 8, SS_ENDELLIPSIS
+    EDITTEXT        IDC_GHOST_OPACITY, 170, 310, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
+    LTEXT           "History size (entries)", IDC_LABEL_HISTORY_SIZE, 14, 326, 150, 8, SS_ENDELLIPSIS
+    EDITTEXT        IDC_HISTORY_SIZE, 170, 324, 36, 12, ES_NUMBER | ES_AUTOHSCROLL
 
-    PUSHBUTTON      "Restore &defaults", IDC_DEFAULTS, 7, 331, 70, 14
-    DEFPUSHBUTTON   "OK", IDOK, 189, 331, 50, 14
-    PUSHBUTTON      "Cancel", IDCANCEL, 243, 331, 50, 14
+    PUSHBUTTON      "Restore &defaults", IDC_DEFAULTS, 7, 349, 90, 14
+    DEFPUSHBUTTON   "OK", IDOK, 203, 349, 52, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 261, 349, 52, 14
 END
+
+// ---------------------------------------------------------------- translations
+// UTF-8 catalogues embedded in the executable (see docs/TRANSLATING.md).
+#include "Languages.rc"

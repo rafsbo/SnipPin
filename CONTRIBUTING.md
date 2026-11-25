@@ -4,7 +4,7 @@ Thanks for helping! Bug reports, feature ideas, documentation fixes and pull req
 
 ## Ground rules
 
-- **English everywhere**: code identifiers, comments, commit messages, UI text, documentation.
+- **English everywhere**: code identifiers, comments, commit messages, documentation. UI text is written in English in `src/i18n/StringTable.h` and translated in `res/lang/` (see [docs/TRANSLATING.md](docs/TRANSLATING.md)).
 - **Windows 7 SP1 must keep working.** The project compiles with `_WIN32_WINNT=0x0601`. If you need a newer API, resolve it at runtime in `src/platform/ApiShim.cpp` and provide a fallback. CI fails if a post-Windows-7 function is imported statically.
 - **No new runtime dependencies.** SnipPin ships as a single executable with the static CRT.
 - **Never break other applications' windows.** Any change to a foreign window must go through `WindowTracker`, so it is journaled and reversible.
@@ -23,7 +23,7 @@ Thanks for helping! Bug reports, feature ideas, documentation fixes and pull req
 - Types and functions in `PascalCase`, variables in `camelCase`, members with a trailing underscore (`hwnd_`), constants as `kName`.
 - Prefer small RAII helpers (`GdiObject`) over manual cleanup.
 - Put platform-independent logic in `src/logic/` (no `<windows.h>`) and add unit tests in `tests/`.
-- All user-visible strings belong in `src/app/Strings.h`.
+- All user-visible strings belong in `src/i18n/StringTable.h` and are shown with `i18n::Tr()` / `i18n::TrFormat()`. A new string needs a key in every `res/lang/*.lang` file; the tests list what is missing.
 
 ## Pull requests
 

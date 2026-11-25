@@ -3,12 +3,17 @@
 #include <algorithm>
 #include <cmath>
 
-#include "app/Strings.h"
+#include "app/AppInfo.h"
+#include "i18n/Catalog.h"
 #include "platform/ApiShim.h"
 #include "platform/Log.h"
 #include "platform/WinUtil.h"
 
 namespace snippin {
+
+using i18n::StringId;
+using i18n::Tr;
+using i18n::TrFormat;
 namespace {
 
 constexpr wchar_t kClassName[] = L"SnipPin.Snippet";
@@ -69,7 +74,7 @@ bool SnippetWindow::Create(HINSTANCE instance, HWND source, const logic::Rect& r
     const POINT center{windowRect.left + windowRect.Width() / 2, windowRect.top + windowRect.Height() / 2};
     windowRect = logic::FitInside(windowRect, ToRect(win::GetWorkAreaFromPoint(center)));
 
-    ::CreateWindowExW(kExStyle, kClassName, (std::wstring(str::kSnippetPrefix) + sourceTitle_).c_str(), kStyle,
+    ::CreateWindowExW(kExStyle, kClassName, i18n::TrFormat(i18n::StringId::SnippetTitle, {sourceTitle_}).c_str(), kStyle,
                       windowRect.left, windowRect.top, windowRect.Width(), windowRect.Height(), nullptr, nullptr,
                       instance, this);
     if (!hwnd_) {
@@ -253,11 +258,11 @@ void SnippetWindow::Paint(HDC dc) {
         ::DeleteDC(src);
     }
     if (sourceClosed_ && !(renderer_ == Renderer::Frozen && frame_)) {
-        message = str::kSourceClosed;
+        message = Tr(StringId::SnippetSourceClosed);
     } else if (sourceMinimized_ && live_) {
-        message = str::kSourceMinimized;
+        message = Tr(StringId::SnippetSourceMinimized);
     } else if (renderer_ != Renderer::Thumbnail && !drawFrame) {
-        message = str::kNoContent;
+        message = Tr(StringId::SnippetNoContent);
     }
     if (message) {
         ::SetBkMode(mem, TRANSPARENT);

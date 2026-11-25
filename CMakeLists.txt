@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 cmake_policy(SET CMP0091 NEW)
 
 project(SnipPin
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "Pin windows and live snippets always on top (Windows 7 - 11)"
     HOMEPAGE_URL "https://github.com/rafsbo/SnipPin"
     LANGUAGES CXX)
@@ -45,7 +45,10 @@ add_library(snippin_logic STATIC
     src/logic/Hotkey.cpp
     src/logic/Hotkey.h
     src/logic/Identity.cpp
-    src/logic/Identity.h)
+    src/logic/Identity.h
+    src/i18n/Catalog.cpp
+    src/i18n/Catalog.h
+    src/i18n/StringTable.h)
 target_include_directories(snippin_logic PUBLIC src)
 snippin_set_warnings(snippin_logic)
 
@@ -66,7 +69,7 @@ if(SNIPPIN_BUILD_APP)
         src/app/HotkeyManager.h
         src/app/MouseHook.cpp
         src/app/MouseHook.h
-        src/app/Strings.h
+        src/app/AppInfo.h
         src/app/TrayIcon.cpp
         src/app/TrayIcon.h
         src/core/RecoveryJournal.cpp
@@ -79,6 +82,8 @@ if(SNIPPIN_BUILD_APP)
         src/core/ZOrderGuard.h
         src/platform/ApiShim.cpp
         src/platform/ApiShim.h
+        src/platform/Localization.cpp
+        src/platform/Localization.h
         src/platform/Log.cpp
         src/platform/Log.h
         src/platform/Settings.cpp
@@ -110,6 +115,11 @@ if(SNIPPIN_BUILD_APP)
         WINVER=0x0601 _WIN32_WINNT=0x0601)
     target_link_libraries(snippin_app_objects PUBLIC snippin_logic)
     snippin_set_warnings(snippin_app_objects)
+
+    # Embedded translations: rebuild the resources when a catalogue changes.
+    file(GLOB SNIPPIN_LANG_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/res/lang/*.lang)
+    set_source_files_properties(res/SnipPin.rc PROPERTIES
+        OBJECT_DEPENDS "${SNIPPIN_LANG_FILES};${CMAKE_CURRENT_SOURCE_DIR}/res/Languages.rc")
 
     set(SNIPPIN_SYSTEM_LIBS user32 gdi32 comctl32 dwmapi shell32 shlwapi ole32 oleaut32 advapi32 uuid)
 
@@ -156,9 +166,13 @@ if(SNIPPIN_BUILD_TESTS)
         tests/TestHarness.h
         tests/GeometryTests.cpp
         tests/HotkeyTests.cpp
-        tests/IdentityTests.cpp)
+        tests/IdentityTests.cpp
+        tests/CatalogTests.cpp
+        tests/TranslationFilesTests.cpp)
     target_link_libraries(snippin_tests PRIVATE snippin_logic)
     target_include_directories(snippin_tests PRIVATE tests)
+    # The translation tests read res/lang/*.lang and res/Languages.rc.
+    target_compile_definitions(snippin_tests PRIVATE SNIPPIN_RES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/res")
     snippin_set_warnings(snippin_tests)
     add_test(NAME snippin_tests COMMAND snippin_tests)
 endif()

@@ -2,11 +2,16 @@
 
 #include <cstdlib>
 
-#include "app/Strings.h"
+#include "app/AppInfo.h"
+#include "i18n/Catalog.h"
 #include "platform/ApiShim.h"
 #include "platform/WinUtil.h"
 
 namespace snippin {
+
+using i18n::StringId;
+using i18n::Tr;
+using i18n::TrFormat;
 namespace {
 
 constexpr wchar_t kClassName[] = L"SnipPin.RegionSelector";
@@ -167,7 +172,7 @@ void RegionSelector::Paint(HDC dc) {
     ::SetBkMode(mem, TRANSPARENT);
     ::SetTextColor(mem, RGB(255, 255, 255));
     RECT banner{0, api::Scale(8, dpi), client.right, api::Scale(40, dpi)};
-    ::DrawTextW(mem, str::kRegionSelectorHint, -1, &banner, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    ::DrawTextW(mem, Tr(StringId::OverlayRegionHint), -1, &banner, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     if (oldFont) {
         ::SelectObject(mem, oldFont);
     }
