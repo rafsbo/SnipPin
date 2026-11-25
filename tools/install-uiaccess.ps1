@@ -26,13 +26,25 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Source = $PSScriptRoot,
-    [string]$Destination = (Join-Path $env:ProgramFiles 'SnipPin'),
+    [string]$Source = '',
+    [string]$Destination = '',
     [switch]$SelfSign,
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Defaults are resolved here, not in param(): Windows PowerShell 5.1 can leave
+# $PSScriptRoot empty in parameter defaults when the script is run with -File.
+if ([string]::IsNullOrEmpty($Source)) {
+    $Source = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+}
+if ([string]::IsNullOrEmpty($Source)) {
+    $Source = (Get-Location).Path
+}
+if ([string]::IsNullOrEmpty($Destination)) {
+    $Destination = Join-Path $env:ProgramFiles 'SnipPin'
+}
 $certSubject = 'CN=SnipPin Local UIAccess Signing'
 $shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'SnipPin (UIAccess).lnk'
 

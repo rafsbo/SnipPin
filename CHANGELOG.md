@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- `install-uiaccess.ps1` failed in Windows PowerShell 5.1 with "Cannot bind argument to parameter 'Path' because it is an empty string" when run with `-File`: the script folder is now resolved reliably.
+
 ## [1.1.0] - Unreleased
 
 ### Added
