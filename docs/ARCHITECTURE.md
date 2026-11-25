@@ -73,6 +73,16 @@ Snippet destruction is always **deferred** through the host window's queue. A sn
 ### Identity and recall
 HWNDs don't survive restarts, so history entries store the process image path, window class, title and, for Explorer windows, the folder path (`IShellWindows`). `logic::MatchScore` ranks candidates. Explorer windows only match the same folder. Recall applies the saved state to a live match, or launches the app / opens the folder and waits up to 15 s for the window to appear.
 
+## Localization
+- `src/i18n/StringTable.h` declares every UI string once, as an X-macro: id, translation key and English text. English is compiled in and is always the fallback.
+- Translations are UTF-8 `key = value` files in `res/lang/`. `res/Languages.rc` embeds them as custom `SNIPPINLANG` resources, so the program stays a single executable. Files in a `lang` folder next to the executable override them, which lets translators try changes without a compiler.
+- `src/i18n/Catalog.cpp` parses catalogues with a portable UTF-8 decoder. When a language is activated, every entry whose placeholders (`%s`/`%d`) differ from English is rejected. Formatting goes through `i18n::Format`, which substitutes only the arguments it was given, so a broken translation can never crash the program the way a `printf` format mismatch would.
+- `src/platform/Localization.cpp` maps `GetUserDefaultUILanguage()` to a language code for *Automatic*. Menus, overlays and notifications read the active catalogue each time they are shown. The stash panel and the settings dialog re-apply their captions when the language changes, so no restart is needed.
+- The unit tests check every shipped catalogue: completeness, unknown keys, placeholders, `&` accelerators, presence in `Languages.rc`, and that `en.lang` matches the built-in English.
+
+## Start with Windows
+Start-up uses the per-user Run key (`"<exe>" --autostart`), so no administrator rights are needed. Windows 8+ keeps a separate on/off switch for Task Manager in `Explorer\StartupApproved\Run`. SnipPin reads it to report the real state, and resets it when the user enables start-up again. When the registered executable no longer exists (SnipPin was moved), the entry is rewritten on the next start. Because Windows can launch SnipPin before Explorer's notification area exists, adding the tray icon is retried on a timer, in addition to the `TaskbarCreated` broadcast.
+
 ## Process model and instances
 A named mutex enforces one instance per session. A second launch posts a registered message that opens the stash panel of the running instance. `ChangeWindowMessageFilterEx` lets this message reach an elevated instance. *Restart as administrator* starts the elevated copy with `--replace`, and it waits for the mutex.
 

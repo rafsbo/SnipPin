@@ -1,10 +1,15 @@
 #include "ui/WindowPicker.h"
 
-#include "app/Strings.h"
+#include "app/AppInfo.h"
+#include "i18n/Catalog.h"
 #include "platform/ApiShim.h"
 #include "platform/WinUtil.h"
 
 namespace snippin {
+
+using i18n::StringId;
+using i18n::Tr;
+using i18n::TrFormat;
 namespace {
 
 constexpr wchar_t kOverlayClass[] = L"SnipPin.PickerOverlay";
@@ -238,7 +243,7 @@ LRESULT CALLBACK WindowPicker::FrameProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
         HGDIOBJ old = font ? ::SelectObject(dc, font.Get()) : nullptr;
         ::SetBkMode(dc, TRANSPARENT);
         ::SetTextColor(dc, RGB(255, 255, 255));
-        ::DrawTextW(dc, str::kPickerHint, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        ::DrawTextW(dc, Tr(StringId::OverlayPickerHint), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         if (old) {
             ::SelectObject(dc, old);
         }

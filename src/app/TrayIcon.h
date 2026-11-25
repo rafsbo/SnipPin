@@ -10,7 +10,8 @@ public:
     bool Add(HWND owner, UINT callbackMessage, HICON icon, const wchar_t* tooltip);
     void Remove();
     // Call when Explorer restarts (the "TaskbarCreated" broadcast).
-    void Readd();
+    // Returns true when the icon is now in the notification area.
+    bool Readd();
     void ShowBalloon(const wchar_t* title, const wchar_t* text, bool warning);
 
 private:

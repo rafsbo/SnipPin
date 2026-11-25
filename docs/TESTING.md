@@ -57,6 +57,20 @@ Record the result in the release pull request as ✅ / ❌ / n.a. per OS.
 - [ ] *Start SnipPin when I sign in* adds/removes the `HKCU\...\Run` value.
 - [ ] *Restore defaults* resets the dialog.
 
+## Languages
+- [ ] With *Language = Automatic*, a German (or Italian, French…) Windows display language shows SnipPin in that language. An unsupported language shows English.
+- [ ] Changing the language in Settings updates the tray menu, the snippet menu, the overlays and the stash panel immediately, without a restart.
+- [ ] Greek and Bulgarian (non-Latin scripts) and Maltese/Lithuanian diacritics display correctly, including on Windows 7.
+- [ ] No text in the settings dialog is cut off badly in German and Finnish (the longest translations).
+- [ ] A `lang\<code>.lang` file next to the exe overrides the built-in translation.
+
+## Start with Windows
+- [ ] *Start with Windows* in the tray menu toggles the entry; the checkmark matches *Settings*.
+- [ ] After a reboot/sign-in SnipPin starts, and the tray icon appears even when Explorer is slow to start.
+- [ ] Disabling SnipPin in *Task Manager → Startup* is reflected (unchecked); ticking it again re-enables it.
+- [ ] Moving `SnipPin.exe` to another folder and starting it there repairs the start-up entry.
+- [ ] Turning the option off removes the entry (`HKCU\...\Run\SnipPin`).
+
 ## UIAccess edition
 - [ ] Unsigned `SnipPinUIA.exe` outside Program Files fails to start (expected, documented error).
 - [ ] After `install-uiaccess.ps1 -SelfSign`, it starts from the Start menu; About shows *UIAccess*.

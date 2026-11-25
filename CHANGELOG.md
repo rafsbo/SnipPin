@@ -4,7 +4,22 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-## [1.0.0] - Unreleased
+## [1.1.0] - Unreleased
+
+### Added
+- User interface in the 24 official EU languages: Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Irish, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Slovak, Slovenian, Spanish, Swedish.
+- *Settings → Language*: automatic (follows the Windows display language) or any language; switching applies immediately.
+- Community translations can be tested without compiling by placing `<code>.lang` files in a `lang` folder next to the executable.
+- *Start with Windows* item in the tray menu.
+- Unit tests that check every translation for completeness, placeholders and menu accelerators.
+- `docs/TRANSLATING.md` guide for translators.
+
+### Changed
+- Start with Windows is more reliable: the entry is repaired when SnipPin is moved, Task Manager's "Disabled" state is shown correctly, and SnipPin waits for the notification area when Windows starts it early at sign-in.
+- The settings dialog is wider so that longer translations fit.
+- Translated messages use a safe placeholder formatter instead of `printf`.
+
+## [1.0.0] - 2026-11-17
 
 ### Added
 - Always-on-top pinning for any window, Explorer folder or dialog, with a z-order guard for fullscreen applications.
@@ -16,3 +31,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Crash-recovery journal and panic restore hotkey.
 - UIAccess edition (`SnipPinUIA.exe`) and installer script.
 - Windows 7 SP1 – Windows 11 support, x86 and x64 builds.
+
+[Unreleased]: https://github.com/rafsbo/SnipPin/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rafsbo/SnipPin/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/rafsbo/SnipPin/releases/tag/v1.0.0

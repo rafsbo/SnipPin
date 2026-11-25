@@ -6,15 +6,21 @@
 #include <cwchar>
 
 #include "Version.h"
-#include "app/Strings.h"
+#include "app/AppInfo.h"
+#include "i18n/Catalog.h"
 #include "logic/Geometry.h"
 #include "platform/ApiShim.h"
+#include "platform/Localization.h"
 #include "platform/Log.h"
 #include "platform/WinUtil.h"
 #include "resource.h"
 #include "ui/SettingsDialog.h"
 
 namespace snippin {
+
+using i18n::StringId;
+using i18n::Tr;
+using i18n::TrFormat;
 namespace {
 
 // ---------------------------------------------------------------- messages
@@ -23,6 +29,8 @@ constexpr UINT kMsgContextGesture = WM_APP + 2;  // wParam = x, lParam = y
 constexpr UINT kMsgSnippetWheel = WM_APP + 3;    // wParam = id, lParam = MAKELPARAM(delta, ctrl)
 constexpr UINT kMsgCloseSnippet = WM_APP + 4;    // wParam = id
 constexpr UINT_PTR kRecallTimer = 0x5B01;
+constexpr UINT_PTR kTrayRetryTimer = 0x5B02;  // tray not ready yet (early autostart)
+constexpr int kMaxTrayRetries = 30;
 
 // ---------------------------------------------------------------- menu ids
 // Per-window and per-snippet blocks of kBlockSize ids; the offset inside a
@@ -61,6 +69,7 @@ constexpr UINT kIdAbout = 105;
 constexpr UINT kIdExit = 106;
 constexpr UINT kIdClearHistory = 107;
 constexpr UINT kIdCloseAllSnippets = 108;
+constexpr UINT kIdAutostart = 109;
 
 constexpr UINT kDirectWindowBase = 1000;
 constexpr UINT kDirectSnippetBase = 1100;
@@ -97,12 +106,17 @@ App::~App() {
 // Initialization
 // ======================================================================
 
-bool App::Initialize(HINSTANCE instance) {
+bool App::Initialize(HINSTANCE instance, bool autostart) {
     instance_ = instance;
+    autostart_ = autostart;
     store_.Initialize();
     settings_ = store_.Load();
     log::Initialize(store_.FilePath(L"snippin.log"), settings_.logToFile);
-    SNIPPIN_LOG(L"SnipPin %s starting (data: %s)", SNIPPIN_VERSION_WSTRING, store_.DataDirectory().c_str());
+    SNIPPIN_LOG(L"SnipPin %s starting (data: %s%s)", SNIPPIN_VERSION_WSTRING, store_.DataDirectory().c_str(),
+                autostart ? L", started with Windows" : L"");
+
+    activeLanguage_ = l10n::ApplyLanguage(instance, settings_.language);
+    SettingsStore::RepairRunAtStartupPath();
 
     journal_.Initialize(store_.FilePath(L"journal.ini"));
     const int recovered = journal_.RestoreOrphans();
@@ -127,7 +141,7 @@ bool App::Initialize(HINSTANCE instance) {
     }
     // A hidden top-level window (not HWND_MESSAGE): message-only windows do
     // not receive the "TaskbarCreated" broadcast.
-    host_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, kHostClassName, str::kAppName, WS_POPUP, 0, 0, 0, 0, nullptr,
+    host_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, kHostClassName, kAppName, WS_POPUP, 0, 0, 0, 0, nullptr,
                               nullptr, instance, this);
     if (!host_) {
         SNIPPIN_LOG(L"CreateWindowExW(host) failed (error %lu)", ::GetLastError());
@@ -170,7 +184,12 @@ bool App::Initialize(HINSTANCE instance) {
         return true;
     });
 
-    tray_.Add(host_, kMsgTray, appIcon_, str::kAppName);
+    if (!tray_.Add(host_, kMsgTray, appIcon_, kAppName)) {
+        // At sign-in SnipPin can start before Explorer's notification area
+        // exists. "TaskbarCreated" normally re-adds the icon; retry as well.
+        SNIPPIN_LOG(L"Tray icon not added yet, retrying");
+        ::SetTimer(host_, kTrayRetryTimer, 2000, nullptr);
+    }
     ApplySettings();
 
     lastActive_ = win::GetTopLevel(::GetForegroundWindow());
@@ -179,9 +198,9 @@ bool App::Initialize(HINSTANCE instance) {
     }
 
     if (recovered > 0) {
-        Notify(str::kNotifyRecovered, false);
+        Notify(Tr(StringId::NotifyRecovered), false);
     } else if (!settings_.firstRunDone) {
-        Notify(str::kNotifyRunning, false);
+        Notify(Tr(StringId::NotifyRunning), false);
     }
     if (!settings_.firstRunDone) {
         settings_.firstRunDone = true;
@@ -295,6 +314,12 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             if (guard_.OnTimer(wParam)) {
                 return 0;
             }
+            if (wParam == kTrayRetryTimer) {
+                if (tray_.Readd() || ++trayRetries_ >= kMaxTrayRetries) {
+                    ::KillTimer(host_, kTrayRetryTimer);
+                }
+                return 0;
+            }
             if (wParam == kRecallTimer) {
                 if (!pendingRecall_.active) {
                     ::KillTimer(host_, kRecallTimer);
@@ -307,10 +332,7 @@ LRESULT App::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else if (::GetTickCount64() > pendingRecall_.deadline) {
                     ::KillTimer(host_, kRecallTimer);
                     pendingRecall_.active = false;
-                    wchar_t text[512];
-                    _snwprintf_s(text, _countof(text), _TRUNCATE, str::kNotifyRecallNotFound,
-                                 pendingRecall_.entry.identity.title.c_str());
-                    Notify(text, true);
+                    Notify(TrFormat(StringId::NotifyRecallNotFound, {pendingRecall_.entry.identity.title}), true);
                 }
                 return 0;
             }
@@ -394,7 +416,7 @@ void App::OnHotkey(HotkeyAction action) {
             if (HWND target = CurrentTarget()) {
                 ExecuteWindowAction(target, kWaTopmost);
             } else {
-                Notify(str::kNotifyNoTarget, true);
+                Notify(Tr(StringId::NotifyNoTarget), true);
             }
             break;
         case HotkeyAction::PickWindow:
@@ -413,7 +435,7 @@ void App::OnHotkey(HotkeyAction action) {
             if (HWND target = CurrentTarget()) {
                 StartSnip(target);
             } else {
-                Notify(str::kNotifyNoTarget, true);
+                Notify(Tr(StringId::NotifyNoTarget), true);
             }
             break;
         case HotkeyAction::ToggleStash:
@@ -437,7 +459,7 @@ void App::StepOpacitySmart(int direction) {
     }
     HWND target = CurrentTarget();
     if (!target) {
-        Notify(str::kNotifyNoTarget, true);
+        Notify(Tr(StringId::NotifyNoTarget), true);
         return;
     }
     ReportResult(tracker_.StepOpacity(target, delta, settings_.minOpacityPercent));
@@ -472,7 +494,7 @@ void App::ToggleGhostSmart() {
         return;
     }
     if (!target) {
-        Notify(str::kNotifyNoTarget, true);
+        Notify(Tr(StringId::NotifyNoTarget), true);
         return;
     }
     ReportResult(tracker_.SetGhost(target, true, settings_.ghostOpacityPercent, settings_.minOpacityPercent));
@@ -594,7 +616,7 @@ void App::RestoreAll() {
             s->SetOpacity(100, settings_.minOpacityPercent);
         }
     }
-    Notify(str::kNotifyRestored, false);
+    Notify(Tr(StringId::NotifyRestored), false);
 }
 
 void App::Recall(size_t recentIndex) {
@@ -608,14 +630,10 @@ void App::Recall(size_t recentIndex) {
     }
     const std::wstring& name = entry.identity.title.empty() ? entry.identity.exePath : entry.identity.title;
     if (!StashService::Launch(entry)) {
-        wchar_t text[512];
-        _snwprintf_s(text, _countof(text), _TRUNCATE, str::kNotifyRecallNotFound, name.c_str());
-        Notify(text, true);
+        Notify(TrFormat(StringId::NotifyRecallNotFound, {name}), true);
         return;
     }
-    wchar_t text[512];
-    _snwprintf_s(text, _countof(text), _TRUNCATE, str::kNotifyRecallLaunching, name.c_str());
-    Notify(text, false);
+    Notify(TrFormat(StringId::NotifyRecallLaunching, {name}), false);
     pendingRecall_.entry = entry;
     pendingRecall_.deadline = ::GetTickCount64() + 15000;
     pendingRecall_.active = true;
@@ -660,21 +678,43 @@ void App::OpenSettings() {
     hotkeys_.UnregisterAll();
     SettingsDialogResult data;
     data.settings = settings_;
-    data.runAtStartup = SettingsStore::IsRunAtStartupEnabled();
+    const bool wasRunAtStartup = SettingsStore::IsRunAtStartupEnabled();
+    data.runAtStartup = wasRunAtStartup;
+    data.languages = l10n::AvailableLanguages(instance_);
     win::ForceForeground(host_);
     if (ShowSettingsDialog(instance_, nullptr, data)) {
+        const bool languageChanged = data.settings.language != settings_.language;
         settings_ = data.settings;
         store_.Save(settings_);
-        SettingsStore::SetRunAtStartup(data.runAtStartup);
+        if (data.runAtStartup != wasRunAtStartup && !SettingsStore::SetRunAtStartup(data.runAtStartup)) {
+            Notify(Tr(StringId::NotifyAutostartFailed), true);
+        }
+        if (languageChanged) {
+            ApplyLanguageNow();
+        }
     }
     ApplySettings();
     open = false;
 }
 
+void App::ToggleAutostart() {
+    const bool enable = !SettingsStore::IsRunAtStartupEnabled();
+    if (!SettingsStore::SetRunAtStartup(enable)) {
+        Notify(Tr(StringId::NotifyAutostartFailed), true);
+        return;
+    }
+    Notify(Tr(enable ? StringId::NotifyAutostartOn : StringId::NotifyAutostartOff), false);
+}
+
+void App::ApplyLanguageNow() {
+    activeLanguage_ = l10n::ApplyLanguage(instance_, settings_.language);
+    panel_.ApplyLanguage();  // menus and overlays read the catalogue when shown
+}
+
 void App::ApplySettings() {
     std::wstring failures;
     if (!hotkeys_.RegisterAll(host_, settings_, failures)) {
-        Notify(std::wstring(str::kNotifyHotkeyFailed) + failures, true);
+        Notify(TrFormat(StringId::NotifyHotkeyFailed, {failures}), true);
     }
     mouseHook_.Configure(settings_.contextMenuEnabled, settings_.contextMenuModifiers);
     guard_.SetEnabled(settings_.zOrderGuardEnabled, settings_.zOrderGuardIntervalMs);
@@ -703,21 +743,20 @@ void App::RestartAsAdministrator() {
 }
 
 void App::ShowAbout() {
-    std::wstring mode = str::kModeStandard;
+    std::wstring mode = Tr(StringId::AboutModeStandard);
     if (win::IsUiAccessProcess()) {
-        mode = str::kModeUiAccess;
+        mode = Tr(StringId::AboutModeUiAccess);
     } else if (win::IsProcessElevated()) {
-        mode = str::kModeAdmin;
+        mode = Tr(StringId::AboutModeAdmin);
     }
     std::wstring data = store_.DataDirectory();
     if (store_.IsPortable()) {
-        data += str::kModePortableSuffix;
+        data = TrFormat(StringId::AboutPortable, {data});
     }
-    wchar_t text[2048];
-    _snwprintf_s(text, _countof(text), _TRUNCATE, str::kAboutFormat, SNIPPIN_VERSION_WSTRING, str::kTagline,
-                 mode.c_str(), data.c_str());
+    const std::wstring text =
+        TrFormat(StringId::AboutFormat, {SNIPPIN_VERSION_WSTRING, Tr(StringId::AppTagline), mode, data});
     win::ForceForeground(host_);
-    ::MessageBoxW(host_, text, str::kAppName, MB_OK | MB_ICONINFORMATION);
+    ::MessageBoxW(host_, text.c_str(), kAppName, MB_OK | MB_ICONINFORMATION);
 }
 
 void App::Exit() {
@@ -768,7 +807,7 @@ void App::AppendOpacityMenu(HMENU parent, UINT base, int currentPercent) {
     // Radio mark on the closest step.
     const int closest = std::clamp((100 - currentPercent + 5) / 10, 0, 9);
     ::CheckMenuRadioItem(sub, base, base + 9, base + static_cast<UINT>(closest), MF_BYCOMMAND);
-    std::wstring label = str::kMenuOpacity;
+    std::wstring label = Tr(StringId::MenuOpacity);
     label += L" (" + std::to_wstring(currentPercent) + L" %)";
     ::AppendMenuW(parent, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), label.c_str());
 }
@@ -778,73 +817,73 @@ void App::AppendWindowActions(HMENU menu, UINT base, HWND target, bool withShort
     auto suffix = [&](HotkeyAction a) { return withShortcuts ? ShortcutSuffix(a) : std::wstring(); };
 
     ::AppendMenuW(menu, MF_STRING | ((tw && tw->topmost) ? MF_CHECKED : 0), base + kWaTopmost,
-                  (std::wstring(str::kMenuAlwaysOnTop) + suffix(HotkeyAction::ToggleTopmost)).c_str());
+                  (std::wstring(Tr(StringId::MenuAlwaysOnTop)) + suffix(HotkeyAction::ToggleTopmost)).c_str());
     AppendOpacityMenu(menu, base + kWaOpacityFirst, tw ? tw->opacityPercent : 100);
     ::AppendMenuW(menu, MF_STRING | ((tw && tw->ghost) ? MF_CHECKED : 0), base + kWaGhost,
-                  (std::wstring(str::kMenuGhost) + suffix(HotkeyAction::ToggleGhost)).c_str());
+                  (std::wstring(Tr(StringId::MenuGhost)) + suffix(HotkeyAction::ToggleGhost)).c_str());
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     ::AppendMenuW(menu, MF_STRING, base + kWaSnip,
-                  (std::wstring(str::kMenuSnipRegion) + suffix(HotkeyAction::SnipRegion)).c_str());
-    ::AppendMenuW(menu, MF_STRING, base + kWaMirror, str::kMenuMirrorWindow);
+                  (std::wstring(Tr(StringId::MenuSnipRegion)) + suffix(HotkeyAction::SnipRegion)).c_str());
+    ::AppendMenuW(menu, MF_STRING, base + kWaMirror, Tr(StringId::MenuMirrorWindow));
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    ::AppendMenuW(menu, MF_STRING, base + kWaFocus, str::kMenuFocus);
-    ::AppendMenuW(menu, MF_STRING | (tw ? 0 : MF_GRAYED), base + kWaRelease, str::kMenuRelease);
+    ::AppendMenuW(menu, MF_STRING, base + kWaFocus, Tr(StringId::MenuBringToFront));
+    ::AppendMenuW(menu, MF_STRING | (tw ? 0 : MF_GRAYED), base + kWaRelease, Tr(StringId::MenuRestoreWindow));
 }
 
 void App::AppendSnippetActions(HMENU menu, UINT base, const SnippetWindow& s) {
-    ::AppendMenuW(menu, MF_STRING, base + kSaLive, str::kMenuLiveMode);
-    ::AppendMenuW(menu, MF_STRING, base + kSaSnapshot, str::kMenuSnapshotMode);
+    ::AppendMenuW(menu, MF_STRING, base + kSaLive, Tr(StringId::SnippetLive));
+    ::AppendMenuW(menu, MF_STRING, base + kSaSnapshot, Tr(StringId::SnippetSnapshot));
     ::CheckMenuRadioItem(menu, base + kSaLive, base + kSaSnapshot, base + (s.IsLive() ? kSaLive : kSaSnapshot),
                          MF_BYCOMMAND);
     ::AppendMenuW(menu, MF_STRING | ((s.IsLive() || s.IsSourceClosed()) ? MF_GRAYED : 0), base + kSaRefresh,
-                  str::kMenuRefreshSnapshot);
+                  Tr(StringId::SnippetRefresh));
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendOpacityMenu(menu, base + kSaOpacityFirst, s.OpacityPercent());
-    ::AppendMenuW(menu, MF_STRING | (s.IsGhost() ? MF_CHECKED : 0), base + kSaGhost, str::kMenuGhost);
-    ::AppendMenuW(menu, MF_STRING, base + kSaZoom100, str::kMenuZoom100);
+    ::AppendMenuW(menu, MF_STRING | (s.IsGhost() ? MF_CHECKED : 0), base + kSaGhost, Tr(StringId::MenuGhost));
+    ::AppendMenuW(menu, MF_STRING, base + kSaZoom100, Tr(StringId::SnippetZoom100));
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     ::AppendMenuW(menu, MF_STRING | (s.IsSourceClosed() ? MF_GRAYED : 0), base + kSaFocusSource,
-                  str::kMenuFocusSource);
-    ::AppendMenuW(menu, MF_STRING | (s.IsSourceClosed() ? MF_GRAYED : 0), base + kSaReselect, str::kMenuReselect);
+                  Tr(StringId::SnippetShowSource));
+    ::AppendMenuW(menu, MF_STRING | (s.IsSourceClosed() ? MF_GRAYED : 0), base + kSaReselect, Tr(StringId::SnippetReselect));
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    ::AppendMenuW(menu, MF_STRING, base + kSaClose, str::kMenuCloseSnippet);
+    ::AppendMenuW(menu, MF_STRING, base + kSaClose, Tr(StringId::SnippetClose));
 }
 
 void App::AppendRecentMenu(HMENU parent) {
     HMENU recent = ::CreatePopupMenu();
     const auto& entries = stash_.Entries();
     if (entries.empty()) {
-        ::AppendMenuW(recent, MF_STRING | MF_GRAYED, 0, str::kMenuNone);
+        ::AppendMenuW(recent, MF_STRING | MF_GRAYED, 0, Tr(StringId::MenuNone));
     }
     for (size_t i = 0; i < entries.size() && kRecentBase + i * 2 + 1 < kRecentEnd; ++i) {
         const auto& id = entries[i].identity;
         std::wstring label = id.title.empty() ? id.exePath : id.title;
         label = win::EscapeMenuText(win::Ellipsize(label, 48));
         HMENU item = ::CreatePopupMenu();
-        ::AppendMenuW(item, MF_STRING, kRecentBase + static_cast<UINT>(i * 2), str::kMenuRecall);
-        ::AppendMenuW(item, MF_STRING, kRecentBase + static_cast<UINT>(i * 2 + 1), str::kMenuRemoveFromHistory);
+        ::AppendMenuW(item, MF_STRING, kRecentBase + static_cast<UINT>(i * 2), Tr(StringId::MenuRecall));
+        ::AppendMenuW(item, MF_STRING, kRecentBase + static_cast<UINT>(i * 2 + 1), Tr(StringId::MenuRemoveFromHistory));
         ::AppendMenuW(recent, MF_POPUP, reinterpret_cast<UINT_PTR>(item), label.c_str());
     }
     if (!entries.empty()) {
         ::AppendMenuW(recent, MF_SEPARATOR, 0, nullptr);
-        ::AppendMenuW(recent, MF_STRING, kIdClearHistory, str::kMenuClearHistory);
+        ::AppendMenuW(recent, MF_STRING, kIdClearHistory, Tr(StringId::MenuClearHistory));
     }
-    ::AppendMenuW(parent, MF_POPUP, reinterpret_cast<UINT_PTR>(recent), str::kMenuRecent);
+    ::AppendMenuW(parent, MF_POPUP, reinterpret_cast<UINT_PTR>(recent), Tr(StringId::MenuRecent));
 }
 
 void App::AppendGlobalItems(HMENU menu) {
-    ::AppendMenuW(menu, MF_STRING, kIdPick, (std::wstring(str::kMenuPickWindow) + ShortcutSuffix(HotkeyAction::PickWindow)).c_str());
+    ::AppendMenuW(menu, MF_STRING, kIdPick, (std::wstring(Tr(StringId::MenuPickWindow)) + ShortcutSuffix(HotkeyAction::PickWindow)).c_str());
     ::AppendMenuW(menu, MF_STRING | (panel_.IsVisible() ? MF_CHECKED : 0), kIdStash,
-                  (std::wstring(str::kMenuShowStash) + ShortcutSuffix(HotkeyAction::ToggleStash)).c_str());
+                  (std::wstring(Tr(StringId::MenuShowStash)) + ShortcutSuffix(HotkeyAction::ToggleStash)).c_str());
     ::AppendMenuW(menu, MF_STRING, kIdRestoreAll,
-                  (std::wstring(str::kMenuRestoreAll) + ShortcutSuffix(HotkeyAction::PanicRestore)).c_str());
+                  (std::wstring(Tr(StringId::MenuRestoreAll)) + ShortcutSuffix(HotkeyAction::PanicRestore)).c_str());
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    ::AppendMenuW(menu, MF_STRING, kIdSettings, str::kMenuSettings);
+    ::AppendMenuW(menu, MF_STRING, kIdSettings, Tr(StringId::MenuSettings));
     if (!win::IsProcessElevated() && !win::IsUiAccessProcess()) {
-        ::AppendMenuW(menu, MF_STRING, kIdAdmin, str::kMenuRunAsAdmin);
+        ::AppendMenuW(menu, MF_STRING, kIdAdmin, Tr(StringId::MenuRunAsAdmin));
     }
-    ::AppendMenuW(menu, MF_STRING, kIdAbout, str::kMenuAbout);
-    ::AppendMenuW(menu, MF_STRING, kIdExit, str::kMenuExit);
+    ::AppendMenuW(menu, MF_STRING, kIdAbout, Tr(StringId::MenuAbout));
+    ::AppendMenuW(menu, MF_STRING, kIdExit, Tr(StringId::MenuExit));
 }
 
 void App::ShowTrayMenu(POINT pt) {
@@ -860,7 +899,7 @@ void App::ShowTrayMenu(POINT pt) {
     if (last) {
         HMENU sub = ::CreatePopupMenu();
         AppendWindowActions(sub, kDirectWindowBase, last, true);
-        const std::wstring label = std::wstring(str::kMenuLastActive) + L": " + WindowLabel(last, 40);
+        const std::wstring label = std::wstring(Tr(StringId::MenuLastActive)) + L": " + WindowLabel(last, 40);
         ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), label.c_str());
     }
 
@@ -878,14 +917,14 @@ void App::ShowTrayMenu(POINT pt) {
         menuPinned_.push_back(tw.hwnd);
         std::wstring label = WindowLabel(tw.hwnd);
         if (tw.ghost) {
-            label += L"  [" + std::wstring(str::kStateGhost) + L"]";
+            label += L"  [" + std::wstring(Tr(StringId::StateGhost)) + L"]";
         }
         ::AppendMenuW(pinned, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), label.c_str());
     }
     if (menuPinned_.empty()) {
-        ::AppendMenuW(pinned, MF_STRING | MF_GRAYED, 0, str::kMenuNone);
+        ::AppendMenuW(pinned, MF_STRING | MF_GRAYED, 0, Tr(StringId::MenuNone));
     }
-    ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(pinned), str::kMenuPinnedWindows);
+    ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(pinned), Tr(StringId::MenuPinnedWindows));
 
     // Snippets.
     HMENU snippetsMenu = ::CreatePopupMenu();
@@ -898,20 +937,22 @@ void App::ShowTrayMenu(POINT pt) {
         menuSnippets_.push_back(s->Id());
         std::wstring label = win::EscapeMenuText(win::Ellipsize(s->SourceTitle(), 40));
         if (s->IsGhost()) {
-            label += L"  [" + std::wstring(str::kStateGhost) + L"]";
+            label += L"  [" + std::wstring(Tr(StringId::StateGhost)) + L"]";
         }
         ::AppendMenuW(snippetsMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(sub), label.c_str());
     }
     if (menuSnippets_.empty()) {
-        ::AppendMenuW(snippetsMenu, MF_STRING | MF_GRAYED, 0, str::kMenuNone);
+        ::AppendMenuW(snippetsMenu, MF_STRING | MF_GRAYED, 0, Tr(StringId::MenuNone));
     } else {
         ::AppendMenuW(snippetsMenu, MF_SEPARATOR, 0, nullptr);
-        ::AppendMenuW(snippetsMenu, MF_STRING, kIdCloseAllSnippets, str::kMenuCloseAllSnippets);
+        ::AppendMenuW(snippetsMenu, MF_STRING, kIdCloseAllSnippets, Tr(StringId::MenuCloseAllSnippets));
     }
-    ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(snippetsMenu), str::kMenuSnippets);
+    ::AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(snippetsMenu), Tr(StringId::MenuSnippets));
 
     AppendRecentMenu(menu);
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    ::AppendMenuW(menu, MF_STRING | (SettingsStore::IsRunAtStartupEnabled() ? MF_CHECKED : 0), kIdAutostart,
+                  Tr(StringId::MenuStartWithWindows));
     AppendGlobalItems(menu);
 
     const UINT id = TrackMenu(menu, pt);
@@ -954,7 +995,8 @@ void App::ShowSnippetMenu(SnippetWindow& snippet, POINT pt) {
     }
     const std::uint64_t id = snippet.Id();
     HMENU menu = ::CreatePopupMenu();
-    const std::wstring header = std::wstring(str::kSnippetPrefix) + win::EscapeMenuText(win::Ellipsize(snippet.SourceTitle(), 48));
+    const std::wstring header =
+        TrFormat(StringId::SnippetTitle, {win::EscapeMenuText(win::Ellipsize(snippet.SourceTitle(), 48))});
     ::AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, header.c_str());
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendSnippetActions(menu, kDirectSnippetBase, snippet);
@@ -975,10 +1017,10 @@ void App::ShowRecentMenu(size_t recentIndex, POINT pt) {
         return;
     }
     HMENU menu = ::CreatePopupMenu();
-    ::AppendMenuW(menu, MF_STRING, kRecentBase + static_cast<UINT>(recentIndex * 2), str::kMenuRecall);
-    ::AppendMenuW(menu, MF_STRING, kRecentBase + static_cast<UINT>(recentIndex * 2 + 1), str::kMenuRemoveFromHistory);
+    ::AppendMenuW(menu, MF_STRING, kRecentBase + static_cast<UINT>(recentIndex * 2), Tr(StringId::MenuRecall));
+    ::AppendMenuW(menu, MF_STRING, kRecentBase + static_cast<UINT>(recentIndex * 2 + 1), Tr(StringId::MenuRemoveFromHistory));
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    ::AppendMenuW(menu, MF_STRING, kIdClearHistory, str::kMenuClearHistory);
+    ::AppendMenuW(menu, MF_STRING, kIdClearHistory, Tr(StringId::MenuClearHistory));
     const UINT id = TrackMenu(menu, pt);
     ::DestroyMenu(menu);
     if (id) {
@@ -1079,6 +1121,9 @@ bool App::DispatchMenuCommand(UINT id, HWND directWindow, std::uint64_t directSn
         case kIdExit:
             Exit();
             return true;
+        case kIdAutostart:
+            ToggleAutostart();
+            return true;
         case kIdClearHistory:
             stash_.Clear();
             return true;
@@ -1110,9 +1155,9 @@ std::vector<PanelRow> App::BuildPanelRows() {
             row.title = tw.identity.title;
         }
         std::wstring state;
-        if (tw.topmost) state = str::kStateTopmost;
+        if (tw.topmost) state = Tr(StringId::StateTopmost);
         if (tw.opacityPercent < 100) state += (state.empty() ? L"" : L" \u00B7 ") + std::to_wstring(tw.opacityPercent) + L"%";
-        if (tw.ghost) state += (state.empty() ? L"" : L" \u00B7 ") + std::wstring(str::kStateGhost);
+        if (tw.ghost) state += (state.empty() ? L"" : L" \u00B7 ") + std::wstring(Tr(StringId::StateGhost));
         row.state = state;
         row.icon = win::GetWindowSmallIcon(tw.hwnd);
         rows.push_back(std::move(row));
@@ -1122,9 +1167,9 @@ std::vector<PanelRow> App::BuildPanelRows() {
         row.ref.group = PanelGroup::Snippets;
         row.ref.snippetId = s->Id();
         row.title = s->SourceTitle();
-        std::wstring state = s->IsLive() ? str::kStateLive : str::kStateSnapshot;
+        std::wstring state = s->IsLive() ? Tr(StringId::StateLive) : Tr(StringId::StateSnapshot);
         if (s->OpacityPercent() < 100) state += L" \u00B7 " + std::to_wstring(s->OpacityPercent()) + L"%";
-        if (s->IsGhost()) state += L" \u00B7 " + std::wstring(str::kStateGhost);
+        if (s->IsGhost()) state += L" \u00B7 " + std::wstring(Tr(StringId::StateGhost));
         row.state = state;
         if (::IsWindow(s->Source())) {
             row.icon = win::GetWindowSmallIcon(s->Source());
@@ -1139,8 +1184,7 @@ std::vector<PanelRow> App::BuildPanelRows() {
         row.ref.recentIndex = i;
         row.title = e.identity.title.empty() ? e.identity.exePath : e.identity.title;
         if (!e.snippetRegions.empty()) {
-            const size_t n = e.snippetRegions.size();
-            row.state = std::to_wstring(n) + (n == 1 ? L" snippet" : L" snippets");
+            row.state = TrFormat(StringId::StateSnippetCount, {std::to_wstring(e.snippetRegions.size())});
         }
         const std::wstring& iconSource = e.identity.folderPath.empty() ? e.identity.exePath : e.identity.folderPath;
         SHFILEINFOW info{};
@@ -1201,13 +1245,13 @@ void App::RefreshUi() {
 void App::ReportResult(OpResult result) {
     switch (result) {
         case OpResult::AccessDenied:
-            Notify(str::kNotifyAccessDenied, true);
+            Notify(Tr(StringId::NotifyAccessDenied), true);
             break;
         case OpResult::Unsupported:
-            Notify(str::kNotifyUnsupported, true);
+            Notify(Tr(StringId::NotifyUnsupported), true);
             break;
         case OpResult::NotCandidate:
-            Notify(str::kNotifyNotCandidate, true);
+            Notify(Tr(StringId::NotifyNotCandidate), true);
             break;
         case OpResult::Ok:
             break;
@@ -1218,7 +1262,7 @@ void App::Notify(const std::wstring& text, bool warning) {
     if (!warning && !settings_.showNotifications) {
         return;
     }
-    tray_.ShowBalloon(str::kAppName, text.c_str(), warning);
+    tray_.ShowBalloon(kAppName, text.c_str(), warning);
 }
 
 }  // namespace snippin

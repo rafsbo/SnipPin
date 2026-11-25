@@ -3,24 +3,85 @@
 #include <algorithm>
 #include <iterator>
 
+#include "i18n/Catalog.h"
 #include "resource.h"
 
 namespace snippin {
 namespace {
 
-struct ModifierChoice {
-    unsigned modifiers;
-    const wchar_t* label;
+using i18n::StringId;
+using i18n::Tr;
+
+constexpr unsigned kModifierChoices[] = {
+    logic::kModControl,
+    logic::kModAlt,
+    logic::kModShift,
+    logic::kModControl | logic::kModShift,
+    logic::kModControl | logic::kModAlt,
+    logic::kModAlt | logic::kModShift,
 };
 
-constexpr ModifierChoice kModifierChoices[] = {
-    {logic::kModControl, L"Ctrl + right-click"},
-    {logic::kModAlt, L"Alt + right-click"},
-    {logic::kModShift, L"Shift + right-click"},
-    {logic::kModControl | logic::kModShift, L"Ctrl + Shift + right-click"},
-    {logic::kModControl | logic::kModAlt, L"Ctrl + Alt + right-click"},
-    {logic::kModAlt | logic::kModShift, L"Alt + Shift + right-click"},
+// Control id -> translated caption.
+const struct {
+    int id;
+    StringId text;
+} kCaptions[] = {
+    {IDC_GROUP_HOTKEYS, StringId::SettingsGroupHotkeys},
+    {IDC_LABEL_HOTKEY_FIRST + 0, StringId::SettingsHkTopmost},
+    {IDC_LABEL_HOTKEY_FIRST + 1, StringId::SettingsHkPick},
+    {IDC_LABEL_HOTKEY_FIRST + 2, StringId::SettingsHkOpacityDown},
+    {IDC_LABEL_HOTKEY_FIRST + 3, StringId::SettingsHkOpacityUp},
+    {IDC_LABEL_HOTKEY_FIRST + 4, StringId::SettingsHkGhost},
+    {IDC_LABEL_HOTKEY_FIRST + 5, StringId::SettingsHkSnip},
+    {IDC_LABEL_HOTKEY_FIRST + 6, StringId::SettingsHkStash},
+    {IDC_LABEL_HOTKEY_FIRST + 7, StringId::SettingsHkPanic},
+    {IDC_GROUP_GESTURE, StringId::SettingsGroupGesture},
+    {IDC_CTXMENU_ENABLED, StringId::SettingsGestureEnabled},
+    {IDC_GROUP_SNIPPETS, StringId::SettingsGroupSnippets},
+    {IDC_SNIPPET_LIVE, StringId::SettingsSnippetLive},
+    {IDC_SNIPPET_COMPAT, StringId::SettingsSnippetCompat},
+    {IDC_GROUP_GENERAL, StringId::SettingsGroupGeneral},
+    {IDC_LABEL_LANGUAGE, StringId::SettingsLanguage},
+    {IDC_RUN_AT_STARTUP, StringId::SettingsRunAtStartup},
+    {IDC_ZORDER_GUARD, StringId::SettingsZOrderGuard},
+    {IDC_NOTIFICATIONS, StringId::SettingsNotifications},
+    {IDC_LABEL_OPACITY_STEP, StringId::SettingsOpacityStep},
+    {IDC_LABEL_GHOST_OPACITY, StringId::SettingsGhostOpacity},
+    {IDC_LABEL_HISTORY_SIZE, StringId::SettingsHistorySize},
+    {IDC_DEFAULTS, StringId::SettingsDefaults},
+    {IDOK, StringId::SettingsOk},
+    {IDCANCEL, StringId::SettingsCancel},
 };
+
+void ApplyCaptions(HWND dlg) {
+    ::SetWindowTextW(dlg, Tr(StringId::SettingsTitle));
+    for (const auto& c : kCaptions) {
+        ::SetDlgItemTextW(dlg, c.id, Tr(c.text));
+    }
+}
+
+// Language combo: item 0 = automatic, then one item per language. The item
+// data is the index into SettingsDialogResult::languages (+1), 0 = auto.
+void PopulateLanguages(HWND dlg, const SettingsDialogResult& data) {
+    HWND combo = ::GetDlgItem(dlg, IDC_LANGUAGE);
+    ::SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    ::SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(Tr(StringId::SettingsLanguageAuto)));
+    ::SendMessageW(combo, CB_SETITEMDATA, 0, 0);
+    int selected = 0;
+    for (size_t i = 0; i < data.languages.size(); ++i) {
+        const auto& lang = data.languages[i];
+        std::wstring label = lang.nativeName;
+        if (!lang.englishName.empty() && lang.englishName != lang.nativeName) {
+            label += L" (" + lang.englishName + L")";
+        }
+        const auto item = ::SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+        ::SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(item), static_cast<LPARAM>(i + 1));
+        if (lang.code == data.settings.language) {
+            selected = static_cast<int>(item);
+        }
+    }
+    ::SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(selected), 0);
+}
 
 bool IsExtendedKey(unsigned vk) {
     switch (vk) {
@@ -71,8 +132,10 @@ void Populate(HWND dlg, const SettingsDialogResult& data) {
     ::SendMessageW(combo, CB_RESETCONTENT, 0, 0);
     int selected = 0;
     for (int i = 0; i < static_cast<int>(std::size(kModifierChoices)); ++i) {
-        ::SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(kModifierChoices[i].label));
-        if (kModifierChoices[i].modifiers == s.contextMenuModifiers) {
+        const std::wstring label = i18n::TrFormat(StringId::SettingsGestureFormat,
+                                                  {logic::FormatModifiers(kModifierChoices[i])});
+        ::SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+        if (kModifierChoices[i] == s.contextMenuModifiers) {
             selected = i;
         }
     }
@@ -86,6 +149,7 @@ void Populate(HWND dlg, const SettingsDialogResult& data) {
     ::SetDlgItemInt(dlg, IDC_OPACITY_STEP, static_cast<UINT>(s.opacityStepPercent), FALSE);
     ::SetDlgItemInt(dlg, IDC_GHOST_OPACITY, static_cast<UINT>(s.ghostOpacityPercent), FALSE);
     ::SetDlgItemInt(dlg, IDC_HISTORY_SIZE, static_cast<UINT>(s.historySize), FALSE);
+    PopulateLanguages(dlg, data);
 }
 
 int ReadInt(HWND dlg, int id, int fallback, int lo, int hi) {
@@ -103,7 +167,14 @@ void Collect(HWND dlg, SettingsDialogResult& data) {
     s.contextMenuEnabled = ::IsDlgButtonChecked(dlg, IDC_CTXMENU_ENABLED) == BST_CHECKED;
     const auto sel = ::SendDlgItemMessageW(dlg, IDC_CTXMENU_MODIFIERS, CB_GETCURSEL, 0, 0);
     if (sel >= 0 && sel < static_cast<LRESULT>(std::size(kModifierChoices))) {
-        s.contextMenuModifiers = kModifierChoices[sel].modifiers;
+        s.contextMenuModifiers = kModifierChoices[sel];
+    }
+    const auto langItem = ::SendDlgItemMessageW(dlg, IDC_LANGUAGE, CB_GETCURSEL, 0, 0);
+    if (langItem >= 0) {
+        const auto index = static_cast<size_t>(::SendDlgItemMessageW(dlg, IDC_LANGUAGE, CB_GETITEMDATA,
+                                                                     static_cast<WPARAM>(langItem), 0));
+        s.language = (index == 0 || index > data.languages.size()) ? std::wstring(L"auto")
+                                                                    : data.languages[index - 1].code;
     }
     data.runAtStartup = ::IsDlgButtonChecked(dlg, IDC_RUN_AT_STARTUP) == BST_CHECKED;
     s.zOrderGuardEnabled = ::IsDlgButtonChecked(dlg, IDC_ZORDER_GUARD) == BST_CHECKED;
@@ -121,6 +192,7 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_INITDIALOG:
             ::SetWindowLongPtrW(dlg, DWLP_USER, lParam);
             data = reinterpret_cast<SettingsDialogResult*>(lParam);
+            ApplyCaptions(dlg);
             Populate(dlg, *data);
             return TRUE;
         case WM_COMMAND:
@@ -137,6 +209,7 @@ INT_PTR CALLBACK DialogProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
                     defaults.settings = AppSettings::Defaults();
                     defaults.settings.firstRunDone = data->settings.firstRunDone;
                     defaults.runAtStartup = false;
+                    defaults.languages = data->languages;
                     Populate(dlg, defaults);
                     return TRUE;
                 }

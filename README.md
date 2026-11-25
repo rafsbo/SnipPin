@@ -9,6 +9,7 @@
 - Single native executable (C++17 / Win32). No .NET, no runtime to install, about 2–5 MB of RAM.
 - Runs on **Windows 7 SP1, 8, 8.1, 10 and 11**, in x86 and x64 builds.
 - No DLL injection, no telemetry, no network access.
+- Available in the **24 official languages of the European Union**.
 
 ---
 
@@ -23,6 +24,8 @@
 | 🪞 **Mirror whole window** | A live copy of an entire window, useful when the original must stay where it is. |
 | 🗂️ **Stash & history** | A side panel lists pinned windows, snippets and recently used windows. One click brings a window back with its pin, opacity, ghost mode and snippet regions. Closed folders and apps are reopened automatically. |
 | 🖱️ **Right-click menus everywhere** | `Ctrl` + right-click on any window, right-click on the tray icon, on a snippet or on a stash entry. Every feature is in these menus as well as on a keyboard shortcut. |
+| 🌍 **24 languages** | Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Irish, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Slovak, Slovenian, Spanish and Swedish. SnipPin follows the Windows display language by default, and you can switch in *Settings* without restarting. |
+| 🚀 **Start with Windows** | One click in the tray menu (*Start with Windows*) or in *Settings*, and SnipPin is back in the notification area after every restart. |
 | 🛟 **Safe by design** | Original window styles are journaled before any change. A crash, kill or log-off never leaves another app's window translucent or click-through: SnipPin restores them on the next start. A panic hotkey restores everything instantly. |
 
 ## What "on top of fullscreen" can and cannot mean
@@ -46,7 +49,7 @@ Windows that belong to elevated (administrator) applications can only be managed
 
 1. Download `SnipPin-<version>-x64.zip` (or `-x86` for 32-bit Windows) from the [Releases](https://github.com/rafsbo/SnipPin/releases) page.
 2. Extract it anywhere and run **`SnipPin.exe`**. The icon appears in the notification area.
-3. Optional: enable **Start SnipPin when I sign in** in *Settings*.
+3. Optional: right-click the tray icon and tick **Start with Windows**, so you never have to start SnipPin again after a restart.
 
 > Unsigned builds may trigger a SmartScreen warning ("Windows protected your PC"). Choose *More info → Run anyway*, or build from source.
 
@@ -93,11 +96,25 @@ Windows only starts a uiAccess program when it is **digitally signed with a trus
 
 > The higher band applies to windows SnipPin creates. A pinned window from another application stays in the normal topmost band. For the strongest "on top" behaviour, use **Mirror whole window** or a snippet.
 
+## Start with Windows
+
+Tick **Start with Windows** in the tray menu, or *Start SnipPin automatically when I sign in to Windows* in *Settings*. SnipPin then registers itself for the current user (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`), with no administrator rights and no installer.
+
+- If you move `SnipPin.exe` to another folder, the start-up entry is repaired the next time you start SnipPin from its new location.
+- On Windows 8 and later, the switch in *Task Manager → Startup apps* (or *Settings → Apps → Startup*) is respected. SnipPin shows the real state, and ticking the option again re-enables it.
+- *Restart as administrator* is not remembered at start-up: Windows does not start elevated programs from the Run key. To manage administrator windows without elevation, use the [UIAccess edition](docs/UIACCESS.md).
+
+## Languages
+
+SnipPin speaks all 24 official EU languages. *Settings → Language* offers *Automatic (system language)*, the default, or any specific language. The change applies immediately.
+
+The translations are new: corrections from native speakers are very welcome. See **[docs/TRANSLATING.md](docs/TRANSLATING.md)**. You can also try a translation without compiling: put the edited `<code>.lang` file in a `lang` folder next to `SnipPin.exe`.
+
 ## Configuration files
 
 | File | Content |
 |---|---|
-| `settings.ini` | Hotkeys, gesture modifier, opacity step, z-order guard, snippet renderer… (human-editable, UTF-16) |
+| `settings.ini` | Hotkeys, language, gesture modifier, opacity step, z-order guard, snippet renderer… (human-editable, UTF-16) |
 | `history.ini` | Stash / recent windows with their pin, opacity, ghost and snippet regions |
 | `journal.ini` | Crash-recovery journal (temporary; deleted on a clean exit) |
 | `snippin.log` | Only when `[Debug] LogToFile=1` is set |
@@ -138,7 +155,7 @@ cmake --preset mingw-x64 && cmake --build --preset mingw-x64
 
 ### Unit tests on any OS
 
-The platform-independent logic (geometry, hotkey parsing, history matching) has unit tests that also run on Linux and macOS:
+The platform-independent logic (geometry, hotkey parsing, history matching, translation catalogues) has unit tests that also run on Linux and macOS. They also check that every language file is complete and safe:
 
 ```bash
 cmake --preset tests-host && cmake --build --preset tests-host && ctest --preset tests-host
@@ -148,15 +165,17 @@ cmake --preset tests-host && cmake --build --preset tests-host && ctest --preset
 
 ```
 src/
-  app/        App host, command router, tray icon, hotkeys, mouse gesture hook, UI strings
+  app/        App host, command router, tray icon, hotkeys, mouse gesture hook
+  i18n/       String table (keys + English), catalogue parser, safe formatting
   core/       WindowTracker (pin/opacity/ghost), ZOrderGuard, StashService, RecoveryJournal
   snippet/    RegionSelector overlay, SnippetWindow (DWM / PrintWindow / snapshot), SnippetManager
   ui/         WindowPicker, StashPanel, SettingsDialog
-  platform/   Win32 helpers, runtime API shim for post-Windows-7 APIs, settings, logging
+  platform/   Win32 helpers, runtime API shim for post-Windows-7 APIs, settings, localization, logging
   logic/      Platform-independent, unit-tested logic
 res/          Icon, manifests (standard + uiAccess), version info, settings dialog
+res/lang/     Translations (one UTF-8 .lang file per language)
 tests/        Unit tests (self-contained harness, no dependencies)
-docs/         Architecture, UIAccess guide, manual test checklist
+docs/         Architecture, UIAccess guide, translation guide, manual test checklist
 tools/        Icon generator, UIAccess installer script
 ```
 
@@ -164,7 +183,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md). All code, comments and UI text are in English.
+Bug reports, ideas, translations and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and, for translations, [docs/TRANSLATING.md](docs/TRANSLATING.md). Code and comments are in English; UI text is translated through `res/lang/`.
 
 ## License
 

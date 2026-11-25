@@ -30,7 +30,8 @@ public:
     App(const App&) = delete;
     App& operator=(const App&) = delete;
 
-    bool Initialize(HINSTANCE instance);
+    // |autostart| is true when Windows launched SnipPin at sign-in.
+    bool Initialize(HINSTANCE instance, bool autostart);
     int Run();
 
     // Best-effort restore used by the unhandled-exception filter.
@@ -57,6 +58,8 @@ private:
     void Recall(size_t recentIndex);
     void ApplyStashEntry(HWND hwnd, const StashEntry& entry);
     void OpenSettings();
+    void ToggleAutostart();
+    void ApplyLanguageNow();
     void ApplySettings();
     void RestartAsAdministrator();
     void ShowAbout();
@@ -109,6 +112,9 @@ private:
     HotkeyManager hotkeys_;
     MouseHook mouseHook_;
 
+    std::wstring activeLanguage_ = L"en";
+    bool autostart_ = false;
+    int trayRetries_ = 0;
     HWND lastActive_ = nullptr;
     std::uint64_t ghostSequence_ = 0;
     bool shuttingDown_ = false;

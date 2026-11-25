@@ -74,7 +74,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
         snippin::App app;
         g_app = &app;
         ::SetUnhandledExceptionFilter(&CrashFilter);
-        if (app.Initialize(instance)) {
+        if (app.Initialize(instance, HasArgument(commandLine, L"--autostart"))) {
             exitCode = app.Run();
         }
         g_app = nullptr;

@@ -13,6 +13,10 @@ namespace {
 
 constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValue[] = L"SnipPin";
+// Task Manager's "Startup apps" switch (Windows 8+). The first byte of the
+// 12-byte binary value is even (0x02/0x06) when enabled, odd when disabled.
+constexpr wchar_t kStartupApprovedKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
 
 constexpr wchar_t kSecHotkeys[] = L"Hotkeys";
 constexpr wchar_t kSecGeneral[] = L"General";
@@ -185,6 +189,10 @@ AppSettings SettingsStore::Load() const {
     s.showNotifications = ini.GetBool(kSecGeneral, L"ShowNotifications", s.showNotifications);
     s.historySize = std::clamp(ini.GetInt(kSecGeneral, L"HistorySize", s.historySize), 0, 100);
     s.firstRunDone = ini.GetBool(kSecGeneral, L"FirstRunDone", s.firstRunDone);
+    s.language = ini.GetString(kSecGeneral, L"Language", L"auto");
+    if (s.language.empty() || s.language.size() > 16) {
+        s.language = L"auto";
+    }
 
     s.contextMenuEnabled = ini.GetBool(kSecContextMenu, L"Enabled", s.contextMenuEnabled);
     unsigned mods = 0;
@@ -216,6 +224,7 @@ void SettingsStore::Save(const AppSettings& s) const {
     ini.SetBool(kSecGeneral, L"ShowNotifications", s.showNotifications);
     ini.SetInt(kSecGeneral, L"HistorySize", s.historySize);
     ini.SetBool(kSecGeneral, L"FirstRunDone", s.firstRunDone);
+    ini.SetString(kSecGeneral, L"Language", s.language);
     ini.SetBool(kSecContextMenu, L"Enabled", s.contextMenuEnabled);
     ini.SetString(kSecContextMenu, L"Modifiers", logic::FormatModifiers(s.contextMenuModifiers));
     ini.SetBool(kSecSnippets, L"CompatibilityMode", s.snippetCompatibilityMode);
@@ -225,14 +234,73 @@ void SettingsStore::Save(const AppSettings& s) const {
     ini.Flush();
 }
 
-bool SettingsStore::IsRunAtStartupEnabled() {
+namespace {
+
+std::wstring ReadRunValue() {
     HKEY key = nullptr;
     if (::RegOpenKeyExW(HKEY_CURRENT_USER, kRunKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        return {};
+    }
+    wchar_t buffer[2048] = {};
+    DWORD size = sizeof(buffer) - sizeof(wchar_t);
+    DWORD type = 0;
+    std::wstring value;
+    if (::RegQueryValueExW(key, kRunValue, nullptr, &type, reinterpret_cast<BYTE*>(buffer), &size) == ERROR_SUCCESS &&
+        (type == REG_SZ || type == REG_EXPAND_SZ)) {
+        value = buffer;
+    }
+    ::RegCloseKey(key);
+    return value;
+}
+
+// True when Task Manager (or Settings > Apps > Startup) disabled the entry.
+bool IsDisabledInTaskManager() {
+    HKEY key = nullptr;
+    if (::RegOpenKeyExW(HKEY_CURRENT_USER, kStartupApprovedKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
         return false;
     }
-    const bool exists = ::RegQueryValueExW(key, kRunValue, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS;
+    BYTE data[16] = {};
+    DWORD size = sizeof(data);
+    DWORD type = 0;
+    const bool found = ::RegQueryValueExW(key, kRunValue, nullptr, &type, data, &size) == ERROR_SUCCESS &&
+                       type == REG_BINARY && size >= 1;
     ::RegCloseKey(key);
-    return exists;
+    return found && (data[0] & 0x01) != 0;
+}
+
+void SetTaskManagerApproval(bool enabled) {
+    HKEY key = nullptr;
+    if (::RegCreateKeyExW(HKEY_CURRENT_USER, kStartupApprovedKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key,
+                          nullptr) != ERROR_SUCCESS) {
+        return;
+    }
+    if (enabled) {
+        const BYTE approved[12] = {0x02};  // "enabled", no timestamp
+        ::RegSetValueExW(key, kRunValue, 0, REG_BINARY, approved, sizeof(approved));
+    } else {
+        ::RegDeleteValueW(key, kRunValue);
+    }
+    ::RegCloseKey(key);
+}
+
+// Executable path from a command line such as "C:\x\SnipPin.exe" --autostart
+std::wstring ExecutableFromCommand(const std::wstring& command) {
+    if (!command.empty() && command[0] == L'"') {
+        const size_t end = command.find(L'"', 1);
+        return end == std::wstring::npos ? command.substr(1) : command.substr(1, end - 1);
+    }
+    const size_t space = command.find(L' ');
+    return space == std::wstring::npos ? command : command.substr(0, space);
+}
+
+}  // namespace
+
+std::wstring SettingsStore::RunCommandLine() {
+    return L"\"" + win::GetModulePath() + L"\" --autostart";
+}
+
+bool SettingsStore::IsRunAtStartupEnabled() {
+    return !ReadRunValue().empty() && !IsDisabledInTaskManager();
 }
 
 bool SettingsStore::SetRunAtStartup(bool enabled) {
@@ -243,7 +311,7 @@ bool SettingsStore::SetRunAtStartup(bool enabled) {
     }
     LONG result;
     if (enabled) {
-        const std::wstring command = L"\"" + win::GetModulePath() + L"\"";
+        const std::wstring command = RunCommandLine();
         result = ::RegSetValueExW(key, kRunValue, 0, REG_SZ, reinterpret_cast<const BYTE*>(command.c_str()),
                                   static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
     } else {
@@ -253,7 +321,28 @@ bool SettingsStore::SetRunAtStartup(bool enabled) {
         }
     }
     ::RegCloseKey(key);
-    return result == ERROR_SUCCESS;
+    if (result == ERROR_SUCCESS) {
+        // An explicit choice in SnipPin overrides an earlier Task Manager switch.
+        SetTaskManagerApproval(enabled);
+    }
+    return result == ERROR_SUCCESS && IsRunAtStartupEnabled() == enabled;
+}
+
+void SettingsStore::RepairRunAtStartupPath() {
+    const std::wstring command = ReadRunValue();
+    if (command.empty() || command == RunCommandLine()) {
+        return;
+    }
+    const std::wstring exe = ExecutableFromCommand(command);
+    if (::GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        HKEY key = nullptr;
+        if (::RegOpenKeyExW(HKEY_CURRENT_USER, kRunKey, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+            const std::wstring fixed = RunCommandLine();
+            ::RegSetValueExW(key, kRunValue, 0, REG_SZ, reinterpret_cast<const BYTE*>(fixed.c_str()),
+                             static_cast<DWORD>((fixed.size() + 1) * sizeof(wchar_t)));
+            ::RegCloseKey(key);
+        }
+    }
 }
 
 }  // namespace snippin

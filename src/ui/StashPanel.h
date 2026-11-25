@@ -43,6 +43,8 @@ public:
     void Hide();
     bool IsVisible() const;
     void Refresh();
+    // Re-reads title, column and group captions from the active language.
+    void ApplyLanguage();
     void Destroy();
     HWND Hwnd() const { return hwnd_; }
 

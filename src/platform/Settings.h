@@ -68,6 +68,7 @@ struct AppSettings {
     bool snippetLiveByDefault = true;
 
     int historySize = 20;
+    std::wstring language = L"auto";  // "auto" (Windows display language) or a code such as "it"
     bool firstRunDone = false;
     bool logToFile = false;
 
@@ -87,9 +88,16 @@ public:
     AppSettings Load() const;
     void Save(const AppSettings& settings) const;
 
-    // HKCU\...\Run entry.
+    // Start with Windows (HKCU\...\Run). "Enabled" means Windows will really
+    // start SnipPin: the Run value exists and it was not switched off in Task
+    // Manager's Startup page (StartupApproved, Windows 8+).
     static bool IsRunAtStartupEnabled();
     static bool SetRunAtStartup(bool enabled);
+    // If start-up is enabled but points to an executable that no longer
+    // exists (SnipPin was moved), re-register the current executable.
+    static void RepairRunAtStartupPath();
+    // Command line written to the Run key: "<exe path>" --autostart
+    static std::wstring RunCommandLine();
 
 private:
     std::wstring dataDir_;
